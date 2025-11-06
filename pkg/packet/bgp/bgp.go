@@ -7945,7 +7945,7 @@ func NewLsTLVPrefixMetric(l *uint32) *LsTLVPrefixMetric {
 	return &LsTLVPrefixMetric{
 		LsTLV: LsTLV{
 			Type:   BGP_ASPATH_ATTR_TYPE_SET,
-			Length: 3, // TODO: implementation for IS-IS small metrics and OSPF prefix metrics.
+			Length: 4, // TODO: implementation for IS-IS small metrics and OSPF prefix metrics.
 		},
 		Metric: *l,
 	}
@@ -7973,6 +7973,9 @@ func (l *LsTLVPrefixMetric) DecodeFromBytes(data []byte) error {
 	case 3:
 		l.Metric = binary.BigEndian.Uint32([]byte{0, value[0], value[1], value[2]})
 
+	case 4:
+		l.Metric = binary.BigEndian.Uint32(value)
+
 	default:
 		return malformedAttrListErr("Incorrect metric length")
 	}
@@ -7994,6 +7997,11 @@ func (l *LsTLVPrefixMetric) Serialize() ([]byte, error) {
 		var buf [4]byte
 		binary.BigEndian.PutUint32(buf[:4], l.Metric)
 		return l.LsTLV.Serialize(buf[1:])
+
+	case 4:
+		var buf [4]byte
+		binary.BigEndian.PutUint32(buf[:4], l.Metric)
+		return l.LsTLV.Serialize(buf[:])
 
 	default:
 		return nil, malformedAttrListErr("Incorrect metric length")
