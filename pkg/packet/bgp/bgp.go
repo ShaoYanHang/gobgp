@@ -6147,7 +6147,7 @@ const (
 	LS_TLV_IGP_FLAGS              = 1152
 	LS_TLV_IGP_ROUTE_TAG          = 1153 // TODO
 	LS_TLV_EXTENDED_ROUTE_TAG     = 1154 // TODO
-	LS_TLV_PREFIX_METRIC          = 1155 // TODO
+	LS_TLV_PREFIX_METRIC          = 1155
 	LS_TLV_OSPF_FORWARDING_ADDR   = 1156 // TODO
 	LS_TLV_OPAQUE_PREFIX_ATTR     = 1157
 	LS_TLV_PREFIX_SID             = 1158 // draft-ietf-idr-bgp-ls-segment-routing-ext
@@ -6246,6 +6246,9 @@ func NewLsAttributeTLVs(lsAttr *LsAttribute) []LsTLVInterface {
 	}
 	if lsAttr.Prefix.Opaque != nil {
 		tlvs = append(tlvs, NewLsTLVOpaquePrefixAttr(lsAttr.Prefix.Opaque))
+	}
+	if lsAttr.Prefix.PrefixMetric != nil {
+		tlvs = append(tlvs, NewLsTLVPrefixMetric(lsAttr.Prefix.PrefixMetric))
 	}
 	if lsAttr.Prefix.SrPrefixSID != nil {
 		tlvs = append(tlvs, NewLsTLVPrefixSID(lsAttr.Prefix.SrPrefixSID))
@@ -7930,6 +7933,88 @@ func (l *LsTLVIGPMetric) MarshalJSON() ([]byte, error) {
 }
 
 func (l *LsTLVIGPMetric) GetLsTLV() LsTLV {
+	return l.LsTLV
+}
+
+type LsTLVPrefixMetric struct {
+	LsTLV
+	Metric uint32
+}
+
+func NewLsTLVPrefixMetric(l *uint32) *LsTLVPrefixMetric {
+	return &LsTLVPrefixMetric{
+		LsTLV: LsTLV{
+			Type:   BGP_ASPATH_ATTR_TYPE_SET,
+			Length: 3, // TODO: implementation for IS-IS small metrics and OSPF prefix metrics.
+		},
+		Metric: *l,
+	}
+}
+
+func (l *LsTLVPrefixMetric) DecodeFromBytes(data []byte) error {
+	value, err := l.LsTLV.DecodeFromBytes(data)
+	if err != nil {
+		return err
+	}
+
+	if l.Type != LS_TLV_PREFIX_METRIC {
+		return malformedAttrListErr("Unexpected TLV type")
+	}
+
+	// https://tools.ietf.org/html/rfc7752#section-3.3.3.2
+	// Prefix Metric TLV format is the same as IGP Metric TLV
+	switch len(value) {
+	case 1:
+		l.Metric = uint32(value[0] & 0x3F)
+
+	case 2:
+		l.Metric = uint32(binary.BigEndian.Uint16(value))
+
+	case 3:
+		l.Metric = binary.BigEndian.Uint32([]byte{0, value[0], value[1], value[2]})
+
+	default:
+		return malformedAttrListErr("Incorrect metric length")
+	}
+
+	return nil
+}
+
+func (l *LsTLVPrefixMetric) Serialize() ([]byte, error) {
+	switch l.Length {
+	case 1:
+		return l.LsTLV.Serialize([]byte{uint8(l.Metric) & 0x3F})
+
+	case 2:
+		var buf [2]byte
+		binary.BigEndian.PutUint16(buf[:2], uint16(l.Metric))
+		return l.LsTLV.Serialize(buf[:])
+
+	case 3:
+		var buf [4]byte
+		binary.BigEndian.PutUint32(buf[:4], l.Metric)
+		return l.LsTLV.Serialize(buf[1:])
+
+	default:
+		return nil, malformedAttrListErr("Incorrect metric length")
+	}
+}
+
+func (l *LsTLVPrefixMetric) String() string {
+	return fmt.Sprintf("{Prefix metric: %d}", l.Metric)
+}
+
+func (l *LsTLVPrefixMetric) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Type   LsTLVType `json:"type"`
+		Metric uint32    `json:"prefix_metric"`
+	}{
+		Type:   l.Type,
+		Metric: l.Metric,
+	})
+}
+
+func (l *LsTLVPrefixMetric) GetLsTLV() LsTLV {
 	return l.LsTLV
 }
 
@@ -9663,8 +9748,9 @@ type LsAttributeLink struct {
 }
 
 type LsAttributePrefix struct {
-	IGPFlags *LsIGPFlags `json:"igp_flags,omitempty"`
-	Opaque   *[]byte     `json:"opaque,omitempty"`
+	IGPFlags     *LsIGPFlags `json:"igp_flags,omitempty"`
+	Opaque       *[]byte     `json:"opaque,omitempty"`
+	PrefixMetric *uint32     `json:"prefix_metric,omitempty"`
 
 	SrPrefixSID *uint32 `json:"sr_prefix_sid,omitempty"`
 }
@@ -9762,6 +9848,9 @@ func (p *PathAttributeLs) Extract() *LsAttribute {
 
 		case *LsTLVOpaquePrefixAttr:
 			l.Prefix.Opaque = &v.Attr
+
+		case *LsTLVPrefixMetric:
+			l.Prefix.PrefixMetric = &v.Metric
 
 		case *LsTLVPrefixSID:
 			l.Prefix.SrPrefixSID = &v.SID
@@ -9870,6 +9959,9 @@ func (p *PathAttributeLs) DecodeFromBytes(data []byte, options ...*MarshallingOp
 
 		case LS_TLV_OPAQUE_PREFIX_ATTR:
 			tlv = &LsTLVOpaquePrefixAttr{}
+
+		case LS_TLV_PREFIX_METRIC:
+			tlv = &LsTLVPrefixMetric{}
 
 		// SR-related TLVs (draft-ietf-idr-bgp-ls-segment-routing-ext-08) for Prefix NLRI
 		case LS_TLV_PREFIX_SID:

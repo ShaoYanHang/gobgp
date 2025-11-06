@@ -863,6 +863,7 @@ message LsAttributePrefix {
   bytes opaque = 2;
 
   uint32 sr_prefix_sid = 3;
+  uint32 prefix_metric = 4;
 }
 
 message LsBgpPeerSegmentSIDFlags {

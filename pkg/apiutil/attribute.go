@@ -2448,9 +2448,9 @@ func NewLsAttributeFromNative(a *bgp.PathAttributeLs) (*api.LsAttribute, error) 
 			SrAdjacencySid:      uint32OrDefault(attr.Link.SrAdjacencySID),
 		},
 		Prefix: &api.LsAttributePrefix{
-			Opaque: bytesOrDefault(attr.Prefix.Opaque),
-
-			SrPrefixSid: uint32OrDefault(attr.Prefix.SrPrefixSID),
+			Opaque:       bytesOrDefault(attr.Prefix.Opaque),
+			PrefixMetric: uint32OrDefault(attr.Prefix.PrefixMetric),
+			SrPrefixSid:  uint32OrDefault(attr.Prefix.SrPrefixSID),
 		},
 		BgpPeerSegment: bgpPeerSegment,
 	}
